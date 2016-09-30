@@ -15,10 +15,10 @@ SRC_URI = "git://github.com/sbabic/swupdate.git;protocol=git \
 
 PACKAGES =+ "${PN}-www"
 
-FILES_${PN}-www = "/www/*"
+FILES_${PN}-www = "/www/ ${systemd_unitdir}"
 FILES_${PN}-dev = "${includedir}"
 FILES_${PN}-staticdev = "${libdir}"
-FILES_${PN} = "${bindir}/* /etc"
+FILES_${PN} = "${bindir} ${sysconfdir}"
 
 S = "${WORKDIR}/git/"
 
