@@ -14,7 +14,8 @@
 
 S = "${WORKDIR}/${PN}"
 
-DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''} python-libarchive-native python-subprocess-native"
+DEPENDS += "python-libarchive-native"
+DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''} "
 IMAGE_DEPENDS ?= ""
 
 def swupdate_is_hash_needed(s, filename):
@@ -94,6 +95,7 @@ do_createlink () {
 python do_swuimage () {
     import shutil
     import libarchive
+    from oe.gpg_sign import get_signer
     from subprocess import check_call, CalledProcessError
 
     workdir = d.getVar('WORKDIR', True)
@@ -143,29 +145,49 @@ python do_swuimage () {
             swupdate_write_sha256(s, file, hash)
 
     if d.getVar('SWUPDATE_SIGNING', True) == '1':
-        privkey = d.getVar('SWUPDATE_PRIVATE_KEY', True)
+        # Can use built in signing functionality in oe meta package
+        if d.getVar("SWUPDATE_SIGN_WITH_GPG", True):
+            # Need to know which key to use
+            if d.getVar("SWUPDATE_GPG_KEY_ID", True) is None:
+                bb.fatal("SWUPDATE_GPG_KEY_ID isn't set")
 
-        if not privkey:
-            bb.fatal("SWUPDATE_PRIVATE_KEY isn't set")
+            signer = get_signer(d, "local")
 
-        if not os.path.exists(privkey):
-            bb.fatal("SWUPDATE_PRIVATE_KEY %s doesn't exist" % (privkey))
+            # Might use a different homedir
+            new_homedir = d.getVar("SWUPDATE_GPG_HOMEDIR", True)
+            if not (new_homedir is None):
+                signer.gpg_path = new_homedir
 
-        passout = d.getVar('SWUPDATE_PASSWORD_FILE', True)
-
-        if passout:
-            passout = "-passin file:'%s' " % (passout)
+            signer.detach_sign(
+                os.path.join(s, 'sw-description'),
+                d.getVar("SWUPDATE_GPG_KEY_ID", True),
+                # TODO figure out how to do this
+                "/dev/null",
+            )
         else:
-            passout = ""
+            privkey = d.getVar('SWUPDATE_PRIVATE_KEY', True)
 
-        signcmd = "openssl dgst -sha256 -sign '%s' %s -out '%s' '%s'" % (
-            privkey,
-            passout,
-            os.path.join(s, 'sw-description.sig'),
-            os.path.join(s, 'sw-description'))
+            if not privkey:
+                bb.fatal("SWUPDATE_PRIVATE_KEY isn't set")
+
+            if not os.path.exists(privkey):
+                bb.fatal("SWUPDATE_PRIVATE_KEY %s doesn't exist" % (privkey))
+
+            passout = d.getVar('SWUPDATE_PASSWORD_FILE', True)
+
+            if passout:
+                passout = "-passin file:'%s' " % (passout)
+            else:
+                passout = ""
+
+            signcmd = "openssl dgst -sha256 -sign '%s' %s -out '%s' '%s'" % (
+                privkey,
+                passout,
+                os.path.join(s, 'sw-description.sig'),
+                os.path.join(s, 'sw-description'))
 
         try:
-            check_call(signcmd, shell=True) != 0:
+            check_call(signcmd, shell=True)
         except CalledProcessError as e:
             bb.fatal("Failed to sign sw-description with %s - %s" % (privkey, e))
 
