@@ -94,9 +94,13 @@ do_createlink () {
 
 python do_swuimage () {
     import shutil
-    import libarchive
     from oe.gpg_sign import get_signer
     from subprocess import check_call, CalledProcessError
+
+    try:
+        from libarchive import Archive
+    except ImportError as e:
+        bb.fatal("Got import error %s when trying to import Archive class. Did you install python-libarchive (NOT libarchive)?")
 
     workdir = d.getVar('WORKDIR', True)
     images = (d.getVar('SWUPDATE_IMAGES', True) or "").split()
@@ -163,6 +167,7 @@ python do_swuimage () {
                 d.getVar("SWUPDATE_GPG_KEY_ID", True),
                 # TODO figure out how to do this
                 "/dev/null",
+                armor=False,
             )
         else:
             privkey = d.getVar('SWUPDATE_PRIVATE_KEY', True)
@@ -191,7 +196,7 @@ python do_swuimage () {
         except CalledProcessError as e:
             bb.fatal("Failed to sign sw-description with %s - %s" % (privkey, e))
 
-    with libarchive.Archive(os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu'), mode="w", format=cpio) as archive:
+    with Archive(os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu'), mode="w", format="cpio") as archive:
         for i in list_for_cpio:
             archive.write(i)
 }
