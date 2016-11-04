@@ -196,9 +196,15 @@ python do_swuimage () {
         except CalledProcessError as e:
             bb.fatal("Failed to sign sw-description with %s - %s" % (privkey, e))
 
-    with Archive(os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu'), mode="w", format="cpio") as archive:
-        for i in list_for_cpio:
-            archive.write(i)
+    curdir = os.getcwd()
+
+    try:
+        os.chdir(s)
+        with Archive(os.path.join(deploydir, d.getVar('IMAGE_NAME', True) + '.swu'), mode="w", format="cpio") as archive:
+            for i in list_for_cpio:
+                archive.writepath(i)
+    finally:
+        os.chdir(curdir)
 }
 
 COMPRESSIONTYPES = ""
