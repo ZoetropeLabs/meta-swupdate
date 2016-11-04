@@ -14,7 +14,6 @@
 
 S = "${WORKDIR}/${PN}"
 
-DEPENDS += "python-libarchive-native"
 DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''} "
 IMAGE_DEPENDS ?= ""
 
@@ -96,11 +95,6 @@ python do_swuimage () {
     import shutil
     from oe.gpg_sign import get_signer
     from subprocess import check_call, CalledProcessError
-
-    try:
-        from libarchive import Archive
-    except ImportError as e:
-        bb.fatal("Got import error %s when trying to import Archive class. Did you install python-libarchive (NOT libarchive)?")
 
     workdir = d.getVar('WORKDIR', True)
     images = (d.getVar('SWUPDATE_IMAGES', True) or "").split()
@@ -200,9 +194,11 @@ python do_swuimage () {
 
     try:
         os.chdir(s)
-        with Archive(os.path.join(deploydir, d.getVar('IMAGE_NAME', True) + '.swu'), mode="w", format="cpio") as archive:
-            for i in list_for_cpio:
-                archive.writepath(i)
+        line = 'for i in ' + ' '.join(list_for_cpio) + '; do echo $i;done | cpio -ov -H crc >' + os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu')
+        try:
+            check_call(line, shell=True)
+        except CalledProcessError as e:
+            bb.fatal("Failed to create update image - %s" % (e))
     finally:
         os.chdir(curdir)
 }
