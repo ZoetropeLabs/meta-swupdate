@@ -14,7 +14,7 @@
 
 S = "${WORKDIR}/${PN}"
 
-DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''}"
+DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''} "
 IMAGE_DEPENDS ?= ""
 
 def swupdate_is_hash_needed(s, filename):
@@ -93,6 +93,8 @@ do_createlink () {
 
 python do_swuimage () {
     import shutil
+    from oe.gpg_sign import get_signer
+    from subprocess import check_call, CalledProcessError
 
     workdir = d.getVar('WORKDIR', True)
     images = (d.getVar('SWUPDATE_IMAGES', True) or "").split()
@@ -141,26 +143,65 @@ python do_swuimage () {
             swupdate_write_sha256(s, file, hash)
 
     if d.getVar('SWUPDATE_SIGNING', True) == '1':
-        privkey = d.getVar('SWUPDATE_PRIVATE_KEY', True)
-        if not privkey:
-            bb.fatal("SWUPDATE_PRIVATE_KEY isn't set")
-        if not os.path.exists(privkey):
-            bb.fatal("SWUPDATE_PRIVATE_KEY %s doesn't exist" % (privkey))
-        passout = d.getVar('SWUPDATE_PASSWORD_FILE', True)
-        if passout:
-            passout = "-passin file:'%s' " % (passout)
-        else:
-            passout = ""
-        signcmd = "openssl dgst -sha256 -sign '%s' %s -out '%s' '%s'" % (
-            privkey,
-            passout,
-            os.path.join(s, 'sw-description.sig'),
-            os.path.join(s, 'sw-description'))
-        if os.system(signcmd) != 0:
-            bb.fatal("Failed to sign sw-description with %s" % (privkey))
+        # Can use built in signing functionality in oe meta package
+        if d.getVar("SWUPDATE_SIGN_WITH_GPG", True):
+            bb.fatal("Not currently supported - check back soon")
+            # Need to know which key to use
+            if d.getVar("SWUPDATE_GPG_KEY_ID", True) is None:
+                bb.fatal("SWUPDATE_GPG_KEY_ID isn't set")
 
-    line = 'for i in ' + ' '.join(list_for_cpio) + '; do echo $i;done | cpio -ov -H crc >' + os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu')
-    os.system("cd " + s + ";" + line)
+            signer = get_signer(d, "local")
+
+            # Might use a different homedir
+            new_homedir = d.getVar("SWUPDATE_GPG_HOMEDIR", True)
+            if not (new_homedir is None):
+                signer.gpg_path = new_homedir
+
+            signer.detach_sign(
+                os.path.join(s, 'sw-description'),
+                d.getVar("SWUPDATE_GPG_KEY_ID", True),
+                # TODO figure out how to do this
+                "/dev/null",
+                armor=False,
+            )
+        else:
+            privkey = d.getVar('SWUPDATE_PRIVATE_KEY', True)
+
+            if not privkey:
+                bb.fatal("SWUPDATE_PRIVATE_KEY isn't set")
+
+            if not os.path.exists(privkey):
+                bb.fatal("SWUPDATE_PRIVATE_KEY %s doesn't exist" % (privkey))
+
+            passout = d.getVar('SWUPDATE_PASSWORD_FILE', True)
+
+            if passout:
+                passout = "-passin file:'%s' " % (passout)
+            else:
+                passout = ""
+
+            signcmd = "openssl dgst -sha256 -sign '%s' %s -out '%s' '%s'" % (
+                privkey,
+                passout,
+                os.path.join(s, 'sw-description.sig'),
+                os.path.join(s, 'sw-description'))
+
+        try:
+            check_call(signcmd, shell=True)
+        except CalledProcessError as e:
+            bb.fatal("Failed to sign sw-description with %s - %s" % (privkey, e))
+
+    curdir = os.getcwd()
+
+    try:
+        os.chdir(s)
+        line = 'for i in ' + ' '.join(list_for_cpio) + '; do echo $i;done | cpio -ov -H crc >' + os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu')
+        try:
+            check_call(line, shell=True)
+        except CalledProcessError as e:
+            bb.fatal("Failed to create update image - %s" % (e))
+    finally:
+        os.chdir(curdir)
 }
 
 COMPRESSIONTYPES = ""
