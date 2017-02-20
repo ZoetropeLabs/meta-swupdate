@@ -181,7 +181,6 @@ python do_swuimage () {
 
     line = 'for i in ' + ' '.join(list_for_cpio) + '; do echo $i;done | cpio -ov -H crc >' + os.path.join(deploydir,d.getVar('IMAGE_NAME', True) + '.swu')
     os.system("cd " + s + ";" + line)
->>>>>>> original/morty
 }
 
 COMPRESSIONTYPES = ""
