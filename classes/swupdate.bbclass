@@ -14,7 +14,7 @@
 
 S = "${WORKDIR}/${PN}"
 
-DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''} "
+DEPENDS += "${@ 'openssl-native' if d.getVar('SWUPDATE_SIGNING', True) == '1' else ''}"
 IMAGE_DEPENDS ?= ""
 
 def swupdate_is_hash_needed(s, filename):
@@ -93,8 +93,6 @@ do_createlink () {
 
 python do_swuimage () {
     import shutil
-    from oe.gpg_sign import get_signer
-    from subprocess import check_call, CalledProcessError
 
     workdir = d.getVar('WORKDIR', True)
     images = (d.getVar('SWUPDATE_IMAGES', True) or "").split()
